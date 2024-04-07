@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  app:
+    image: lscr.io/linuxserver/freshrss:latest
+    container_name: ${APP_NAME}
+    restart: unless-stopped
+    network_mode: service:tailscale
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - UMASK=${UMASK}
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - app:/config
+  tailscale:
+    image: ghcr.io/tailscale/tailscale:stable
+    container_name: ts-${APP_NAME}
+    hostname: ${TS_HOSTNAME}
+    restart: unless-stopped
+    cap_add:
+      - net_admin
+      - sys_module
+    env_file: /root/secrets/ts_authkey
+    environment:
+      - TS_EXTRA_ARGS=--advertise-tags=tag:container
+      - TS_SERVE_CONFIG=/tailscale/serve.json
+      - TS_NO_LOGS_NO_SUPPORT=true
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - tailscale:/var/lib/tailscale
+      - /root/compose/freshrss/tailscale:/tailscale
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - internal
+  db:
+    image: postgres:alpine
+    container_name: db-${APP_NAME}
+    restart: unless-stopped
+    environment:
+      - /etc/timezone:/ect/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - POSTGRES_USER=${APP_NAME}
+      - POSTGRES_DB=${APP_NAME}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks:
+      - internal
+
+volumes:
+  app:
+    name: ${APP_NAME}
+  tailscale:
+    name: ts-${APP_NAME}
+  db:
+    name: db-${APP_NAME}
+
+networks:
+  internal:
+    name: ${APP_NAME}
+    driver: bridge
